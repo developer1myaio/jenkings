@@ -1,0 +1,51 @@
+pipeline {
+  agent any
+
+  environment {
+    APP_NAME = "fastapi-jenkins"
+    IMAGE_NAME = "fastapi-jenkins-image"
+    HOST_PORT = "8000"
+    CONTAINER_PORT = "8000"
+  }
+
+  stages {
+    stage("Checkout") {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage("Build Docker Image") {
+      steps {
+        sh """
+          docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+          docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
+        """
+      }
+    }
+
+    stage("Deploy Locally") {
+      steps {
+        sh """
+          set +e
+          docker stop ${APP_NAME} || true
+          docker rm ${APP_NAME} || true
+          set -e
+
+          docker run -d --name ${APP_NAME} \
+            -e APP_ENV=jenkins \
+            -e APP_VERSION=${BUILD_NUMBER} \
+            -p ${HOST_PORT}:${CONTAINER_PORT} \
+            ${IMAGE_NAME}:latest
+        """
+      }
+    }
+  }
+
+  post {
+    always {
+      sh "docker image ls | head -n 20"
+      sh "docker ps | head -n 20"
+    }
+  }
+}
